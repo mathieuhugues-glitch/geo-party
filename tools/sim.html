@@ -1,0 +1,37 @@
+<!doctype html><meta charset="utf-8"><body style="margin:0;background:#fff">
+<div id="grid" style="display:flex;flex-wrap:wrap;width:1800px"></div>
+<script src="../data/geo-data.js"></script>
+<script>
+// Build-time helper: renders flags and shapes to small rasters, computes nearest look-alikes.
+async function run(){
+  const D=window.GEO_DATA, out={flag:{},shape:{}};
+  const N=24, M=16;
+  const fv={};
+  for(const c of D.countries){
+    const img=new Image(); img.src='../flags/'+c.c.toLowerCase()+'.svg'; await img.decode();
+    const cv=document.createElement('canvas'); cv.width=N; cv.height=M; const x=cv.getContext('2d');
+    x.drawImage(img,0,0,N,M); fv[c.c]=x.getImageData(0,0,N,M).data;
+  }
+  const sv={}; const S=40;
+  const grid=document.getElementById('grid');
+  for(const c of D.countries){ const d=D.shapes[c.c]; if(!d) continue;
+    const cv=document.createElement('canvas'); cv.width=S; cv.height=S; const x=cv.getContext('2d');
+    x.scale(S/1000,S/1000); x.fill(new Path2D(d),'evenodd'); const a=x.getImageData(0,0,S,S).data;
+    const v=new Uint8Array(S*S); for(let i=0;i<S*S;i++) v[i]=a[i*4+3]>127?1:0; sv[c.c]=v;
+    const cell=document.createElement('div'); cell.style.cssText='width:110px;height:130px;font:11px sans-serif;text-align:center';
+    cell.innerHTML='<svg viewBox="0 0 1000 1000" width="100" height="100"><path d="'+d+'" fill="#000" fill-rule="evenodd"/></svg><br>'+c.c+' '+c.n.slice(0,14);
+    grid.appendChild(cell);
+  }
+  const codes=Object.keys(fv);
+  for(const a of codes){ const r=[];
+    for(const b of codes){ if(a===b) continue; let s=0; const A=fv[a],B=fv[b];
+      for(let i=0;i<A.length;i+=4){ const dr=A[i]-B[i],dg=A[i+1]-B[i+1],db=A[i+2]-B[i+2]; s+=Math.sqrt(dr*dr+dg*dg+db*db);} r.push([b,s]); }
+    r.sort((p,q)=>p[1]-q[1]); out.flag[a]=r.slice(0,12).map(p=>p[0]); }
+  const sc=Object.keys(sv);
+  for(const a of sc){ const r=[];
+    for(const b of sc){ if(a===b) continue; let i1=0,u=0; const A=sv[a],B=sv[b]; for(let i=0;i<A.length;i++){ i1+=A[i]&B[i]; u+=A[i]|B[i]; } r.push([b,1-i1/u]); }
+    r.sort((p,q)=>p[1]-q[1]); out.shape[a]=r.slice(0,15).map(p=>p[0]); }
+  window.__SIM=out;
+}
+run().catch(e=>window.__ERR=String(e));
+</script>

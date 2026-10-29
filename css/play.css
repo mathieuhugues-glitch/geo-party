@@ -1,0 +1,59 @@
+html, body { height: 100%; overscroll-behavior: none; }
+body { -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+#app { position: fixed; inset: 0; display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+#bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; font-weight: 700; font-size: 17px; min-height: 50px; }
+#me { display: flex; align-items: center; gap: 8px; }
+#me .avatar { width: 34px; height: 34px; font-size: 20px; }
+.st { font-size: 13px; color: var(--mut); display: flex; align-items: center; gap: 6px; }
+.st::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #888; }
+.st.ok::before { background: var(--ok); } .st.bad::before { background: var(--bad); animation: pulse .8s infinite; }
+#screen { flex: 1; position: relative; display: flex; flex-direction: column; min-height: 0; padding: 0 14px 14px; }
+.center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 14px; }
+h1 { margin: 0; font-size: 44px; font-weight: 800; background: linear-gradient(90deg, #ffd23f, #ff7b54 50%, #c86bff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.mut { color: var(--mut); font-size: 17px; line-height: 1.35; }
+.field { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.field label { font-size: 14px; color: var(--mut); font-weight: 700; }
+.field input { font: inherit; font-size: 24px; font-weight: 700; padding: 14px 16px; border-radius: 14px; border: 2px solid var(--line); background: rgba(255,255,255,.08); color: #fff; outline: none; width: 100%; -webkit-user-select: text; user-select: text; }
+.field input:focus { border-color: var(--acc); }
+#code { text-transform: uppercase; letter-spacing: 8px; text-align: center; }
+.pbtn { font-size: 22px; font-weight: 800; border: 0; border-radius: 16px; padding: 16px 22px; width: 100%; max-width: 360px; background: linear-gradient(135deg, #ffd23f, #ff9f1c); color: #2b1600; }
+.pbtn:disabled { opacity: .4; }
+.pbtn.ghost { background: rgba(255,255,255,.1); color: #fff; }
+.err { color: #ff8fa3; font-weight: 700; min-height: 22px; }
+.big-ava { width: 120px; height: 120px; font-size: 70px; animation: popIn .5s both; }
+.big-ico { font-size: 84px; animation: popIn .5s both; }
+.ttl { font-size: 30px; font-weight: 800; }
+.qhead { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: var(--mut); font-weight: 700; margin: 2px 0 8px; }
+.tier { border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+.tier-1 { background: rgba(47,210,122,.2); color: #6ff0a8; } .tier-2 { background: rgba(255,186,8,.2); color: #ffd166; } .tier-3 { background: rgba(255,77,109,.22); color: #ff8fa3; }
+.ptimer { height: 8px; border-radius: 8px; background: rgba(255,255,255,.12); overflow: hidden; margin-bottom: 10px; }
+.ptimer > div { height: 100%; background: linear-gradient(90deg, #2fd27a, #ffd23f, #ff4d6d); width: 100%; }
+.qtext { font-size: 19px; font-weight: 700; text-align: center; margin-bottom: 8px; }
+.thumb { display: flex; justify-content: center; align-items: center; height: 22vh; min-height: 90px; margin-bottom: 10px; }
+.thumb img { max-height: 100%; max-width: 80%; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+.thumb .sbox { height: 100%; aspect-ratio: 1; background: #eef0f8; border-radius: 14px; display: grid; place-items: center; }
+.thumb .sbox svg { width: 88%; height: 88%; } .thumb .sbox path { fill: #111; }
+.thumb .word { font-size: 34px; font-weight: 800; color: var(--acc); text-align: center; }
+.pops { flex: 1; display: grid; grid-template-rows: repeat(4, 1fr); gap: 10px; min-height: 0; }
+.pop { border: 0; border-radius: 18px; background: var(--oc); color: #fff; font-size: 22px; font-weight: 800; display: flex; align-items: center; gap: 12px; padding: 8px 16px; text-align: left; box-shadow: 0 5px 0 rgba(0,0,0,.25); min-height: 64px; transition: transform .1s, opacity .2s; line-height: 1.1; }
+.pop:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0,0,0,.25); }
+.pop .sym { font-size: 20px; width: 24px; opacity: .9; }
+.pops.locked .pop { opacity: .3; } .pops.locked .pop.mine { opacity: 1; box-shadow: 0 0 0 4px #fff; }
+.locked-msg { text-align: center; font-weight: 800; font-size: 18px; margin-top: 10px; color: var(--acc); min-height: 24px; }
+.res-mark { font-size: 96px; animation: popIn .45s both; line-height: 1; }
+.res-pts { font-size: 54px; font-weight: 800; animation: fadeUp .4s .1s both; }
+.res-bonus { font-size: 22px; color: var(--acc); font-weight: 700; animation: fadeUp .4s .2s both; }
+.res-total { font-size: 20px; color: var(--mut); animation: fadeUp .4s .3s both; }
+.res-total b { color: #fff; font-size: 26px; }
+.res-ans { font-size: 18px; background: rgba(255,255,255,.08); padding: 10px 16px; border-radius: 14px; animation: fadeUp .4s .3s both; }
+.good { color: var(--ok); } .bad { color: var(--bad); }
+/* map */
+.mapwrap { position: relative; flex: 1; min-height: 0; border-radius: 16px; overflow: hidden; border: 2px solid rgba(255,255,255,.15); background: #15336b; }
+.mapwrap svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.zoombtns { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.zoombtns button { width: 46px; height: 46px; border-radius: 12px; border: 0; background: rgba(10,15,44,.8); color: #fff; font-size: 26px; font-weight: 800; }
+.maphint { position: absolute; left: 8px; bottom: 8px; right: 8px; text-align: center; font-size: 13px; color: #fff; background: rgba(10,15,44,.7); border-radius: 10px; padding: 6px; pointer-events: none; }
+.confirm { margin-top: 10px; max-width: none; }
+.mprompt { text-align: center; font-weight: 800; font-size: 22px; color: var(--acc); line-height: 1.1; }
+.msub { text-align: center; font-size: 15px; color: var(--mut); margin-bottom: 8px; }
+.rank-big { font-size: 110px; font-weight: 800; line-height: 1; animation: popIn .6s both; }
