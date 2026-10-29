@@ -113,8 +113,11 @@
     if (v.kind === 'flags') thumb = '<img src="flags/' + v.flag + '.svg" alt="">';
     else if (v.kind === 'shapes') thumb = '<div class="sbox"><svg viewBox="0 0 1000 1000" style="' + (v.transform ? 'transform:' + v.transform : '') + '"><path fill-rule="evenodd" d="' + (v.shapePath || '') + '"/></svg></div>';
     else if (v.kind === 'capitals') thumb = '<div class="word">' + esc(v.subject) + '</div>';
-    screen.innerHTML = head(v) + '<div class="qtext">' + esc(v.prompt) + '</div><div class="thumb">' + thumb + '</div>' +
-      '<div class="pops' + (v.locked ? ' locked' : '') + '" id="pops">' + v.options.map((o, i) => '<button class="pop opt-' + LET[i] + (v.choice === i ? ' mine' : '') + '" data-i="' + i + '"><span class="sym"></span><span>' + esc(o) + '</span></button>').join('') + '</div>' +
+    else if (v.kind === 'mystery') thumb = '<div class="pclue" id="pclue"></div>';
+    else if (v.kind === 'zoom') thumb = '<div class="pwatch">🛰️ Watch the big screen - it is zooming out!</div>';
+    const two = v.options.length === 2;
+    screen.innerHTML = head(v) + '<div class="qtext">' + esc(v.prompt) + (v.subtitle ? '<div class="qsub">' + esc(v.subtitle) + '</div>' : '') + '</div>' + (thumb ? '<div class="thumb' + (v.kind === 'mystery' || v.kind === 'zoom' ? ' small' : '') + '">' + thumb + '</div>' : '') +
+      '<div class="pops' + (two ? ' two' : '') + (v.locked ? ' locked' : '') + '" id="pops">' + v.options.map((o, i) => '<button class="pop opt-' + LET[i] + (v.choice === i ? ' mine' : '') + '" data-i="' + i + '"><span class="sym"></span>' + (two && v.flags ? '<img class="pflag" src="flags/' + v.flags[i] + '.svg" alt="">' : '') + '<span>' + esc(o) + '</span></button>').join('') + '</div>' +
       '<div class="locked-msg" id="lmsg">' + (v.locked ? '🔒 Answer locked - wait for the others…' : '') + '</div>';
     if (!v.locked) screen.querySelectorAll('.pop').forEach(b => b.addEventListener('click', () => {
       const i = +b.dataset.i; if ($('#pops').classList.contains('locked')) return;
@@ -122,11 +125,19 @@
       if (navigator.vibrate) navigator.vibrate(25);
       client.send({ t: 'answer', qid: v.qid, choice: i });
     }));
+    if (v.kind === 'mystery') clueTick();
     timerBar();
+  }
+  // Mystery Country: show the clue currently on the big screen (clues are revealed every clueMs)
+  function clueTick() {
+    const el = $('#pclue'); if (!el || !view || !view.clues) return;
+    const n = Math.min(3, 1 + Math.floor((view.time - Math.max(0, deadline - Date.now())) / view.clueMs));
+    if (el.dataset.n !== String(n)) { el.dataset.n = n; el.innerHTML = '<b>Clue ' + n + '/3 · up to ' + [1000, 700, 400][n - 1] + ' pts</b>' + esc(view.clues[n - 1]); }
+    if (n < 3 && deadline > Date.now()) setTimeout(clueTick, 250);
   }
   async function rMap(v) {
     deadline = Date.now() + v.left;
-    screen.innerHTML = head(v) + '<div class="mprompt">' + esc(v.prompt) + '</div><div class="msub">' + esc(v.subtitle || '') + '</div><div class="mapwrap" id="mw"><div class="center"><div class="mut">Loading map…</div></div></div><button class="pbtn confirm" id="conf" disabled>' + (v.locked ? '🔒 Pin locked' : 'Tap the map to place your pin') + '</button>';
+    screen.innerHTML = head(v) + '<div class="mprompt">' + esc(v.prompt) + '</div><div class="msub">' + (v.img ? '<img class="lmthumb" src="' + esc(v.img) + '" alt=""> ' : '') + esc(v.subtitle || '') + '</div><div class="mapwrap" id="mw"><div class="center"><div class="mut">Loading map…</div></div></div><button class="pbtn confirm" id="conf" disabled>' + (v.locked ? '🔒 Pin locked' : 'Tap the map to place your pin') + '</button>';
     timerBar();
     try { await loadMap(); } catch (e) { $('#mw').innerHTML = '<div class="center">Map failed to load</div>'; return; }
     if (view !== v && !(view && view.qid === v.qid)) return;
@@ -160,7 +171,7 @@
   }
   function rResult(v) {
     let h = '<div class="center">';
-    if (v.kind === 'map') {
+    if (v.pin) {
       h += '<div class="res-mark">' + (v.km == null ? '⏰' : v.km <= 300 ? '🎯' : v.km <= 1500 ? '📍' : '🌊') + '</div>';
       h += v.km == null ? '<div class="ttl">No pin placed</div>' : '<div class="ttl">' + fmt(v.km) + ' km away</div>';
       h += '<div class="res-pts ' + (v.points ? 'good' : 'bad') + '">+' + fmt(v.points) + '</div>';
@@ -169,7 +180,7 @@
       h += '<div class="res-pts ' + (v.correct ? 'good' : 'bad') + '">+' + fmt(v.points) + '</div>';
       if (v.bonus) h += '<div class="res-bonus">🔥 +' + fmt(v.bonus) + ' streak bonus (' + v.streak + ' in a row)</div>';
     }
-    h += '<div class="res-ans">Answer: <b>' + esc(v.answer) + '</b></div><div class="res-total">Your total: <b>' + fmt(v.total) + '</b> pts</div></div>';
+    h += '<div class="res-ans">Answer: <b>' + esc(v.answer) + '</b>' + (v.kind === 'hilo' && v.capInfo ? '<div class="res-info">' + esc(v.capInfo) + '</div>' : '') + '</div><div class="res-total">Your total: <b>' + fmt(v.total) + '</b> pts</div></div>';
     screen.innerHTML = h;
     if (navigator.vibrate) navigator.vibrate(v.correct ? [20, 40, 20] : 60);
   }

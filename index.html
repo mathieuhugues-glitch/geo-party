@@ -16,9 +16,10 @@
       <div class="card settings">
         <h2>Rounds</h2>
         <div id="roundPicks" class="round-picks"></div>
-        <div class="row">
-          <h2>Questions per round</h2>
-          <div id="countPick" class="seg"></div>
+        <div class="row opts-row">
+          <div><h2>Questions per round</h2><div id="countPick" class="seg"></div></div>
+          <div><h2>Difficulty</h2><div id="diffPick" class="seg"></div></div>
+          <div id="diffInfo" class="diff-info"></div>
         </div>
         <label class="toggle"><input type="checkbox" id="rotateOpt"><span class="sw"></span><span>Twist: rotate / mirror the hard shapes</span></label>
         <div class="seen"><span id="seenInfo"></span><button id="resetSeen" class="btn ghost small">Reset seen questions</button></div>
@@ -59,6 +60,10 @@
 <script src="data/geo-data.js"></script>
 <script src="data/sim.js"></script>
 <script src="data/worldmap.js"></script>
+<script src="data/landmarks.js"></script>
+<script src="data/stats.js"></script>
+<script src="data/mystery.js"></script>
+<script src="data/zoom.js"></script>
 <script src="js/questions.js"></script>
 <script src="js/net.js"></script>
 <script src="js/map.js"></script>

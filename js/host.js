@@ -4,7 +4,7 @@
   const Q = window.GPQ, Snd = window.GPSound, MAP = window.GPMap;
   const params = new URLSearchParams(location.search);
   const FAST = params.has('fast') ? Math.max(0.05, parseFloat(params.get('fast')) || 0.25) : 1; // test helper: shortens pauses (not answer timers)
-  const db = Q.makeDB(window.GEO_DATA, window.GEO_SIM);
+  const db = Q.makeDB(window.GEO_DATA, window.GEO_SIM, { landmarks: window.GEO_LANDMARKS, stats: window.GEO_STATS, mystery: window.GEO_MYSTERY, zoom: window.GEO_ZOOM });
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const COLORS = ['#ff6b81', '#4dabf7', '#ffd43b', '#69db7c', '#da77f2', '#ff922b', '#3bc9db', '#f783ac', '#a9e34b', '#9775fa', '#ffa8a8', '#63e6be'];
@@ -17,11 +17,22 @@
   addEventListener('resize', fit); fit();
 
   /* ---------- persistent settings & seen questions ---------- */
-  const SEEN_KEY = 'geoparty.seen.v1', SET_KEY = 'geoparty.settings.v1';
+  const SEEN_KEY = 'geoparty.seen.v1', SET_KEY = 'geoparty.settings.v2', OLD_SET_KEY = 'geoparty.settings.v1';
+  const COUNTS = [6, 10, 15], DIFFS = ['easy', 'normal', 'expert'];
   function loadSeen() { try { const o = JSON.parse(localStorage.getItem(SEEN_KEY)) || {}; const r = {}; Q.ROUND_ORDER.forEach(k => r[k] = new Set(o[k] || [])); return r; } catch (e) { const r = {}; Q.ROUND_ORDER.forEach(k => r[k] = new Set()); return r; } }
   function saveSeen(s) { const o = {}; Q.ROUND_ORDER.forEach(k => o[k] = [...s[k]]); localStorage.setItem(SEEN_KEY, JSON.stringify(o)); }
   let seen = loadSeen();
-  const settings = Object.assign({ rounds: ['flags', 'shapes', 'capitals', 'map'], count: 15, rotate: false }, (() => { try { return JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch (e) { return {}; } })());
+  const settings = Object.assign({ rounds: Q.ROUND_ORDER.slice(), count: 10, difficulty: 'normal', rotate: false }, (() => {
+    try {
+      const v2 = JSON.parse(localStorage.getItem(SET_KEY)); if (v2) return v2;
+      const v1 = JSON.parse(localStorage.getItem(OLD_SET_KEY)); // migrate the 4-round settings: keep choices, add the new rounds
+      if (v1) return { rounds: (v1.rounds || []).concat(['landmarks', 'hilo', 'mystery', 'zoom']), rotate: !!v1.rotate };
+    } catch (e) { }
+    return {};
+  })());
+  settings.rounds = Q.ROUND_ORDER.filter(r => (settings.rounds || []).includes(r));
+  if (!COUNTS.includes(settings.count)) settings.count = 10;
+  if (!DIFFS.includes(settings.difficulty)) settings.difficulty = 'normal';
   const saveSettings = () => localStorage.setItem(SET_KEY, JSON.stringify(settings));
 
   /* ---------- state ---------- */
@@ -112,7 +123,11 @@
       rp.appendChild(b);
     });
     const cp = $('#countPick'); cp.innerHTML = '';
-    [5, 10, 15, 20].forEach(n => { const b = document.createElement('button'); b.textContent = n; b.className = settings.count === n ? 'on' : ''; b.onclick = () => { settings.count = n; saveSettings(); buildLobby(); }; cp.appendChild(b); });
+    COUNTS.forEach(n => { const b = document.createElement('button'); b.textContent = n; b.dataset.count = n; b.className = settings.count === n ? 'on' : ''; b.onclick = () => { settings.count = n; saveSettings(); buildLobby(); }; cp.appendChild(b); });
+    const dp = $('#diffPick'); dp.innerHTML = '';
+    DIFFS.forEach(d => { const b = document.createElement('button'); b.textContent = Q.DIFF_NAMES[d]; b.dataset.diff = d; b.className = settings.difficulty === d ? 'on' : ''; b.onclick = () => { settings.difficulty = d; saveSettings(); buildLobby(); }; dp.appendChild(b); });
+    const sp = Q.tierSplit(settings.count, settings.difficulty);
+    $('#diffInfo').textContent = 'Each round: ' + sp[0] + ' easy → ' + sp[1] + ' medium → ' + sp[2] + ' hard';
     $('#rotateOpt').checked = !!settings.rotate;
     const tot = Q.ROUND_ORDER.reduce((a, k) => a + seen[k].size, 0);
     $('#seenInfo').textContent = tot ? tot + ' questions already played this evening will be avoided.' : 'No questions played yet this evening.';
@@ -125,7 +140,7 @@
     const n = [...S.players.values()].filter(p => p.connected).length;
     const ok = n > 0 && settings.rounds.length > 0;
     $('#startBtn').disabled = !ok;
-    $('#startHint').textContent = !settings.rounds.length ? 'Pick at least one round.' : n === 0 ? 'Waiting for players to join…' : n + ' player' + (n > 1 ? 's' : '') + ' ready · ' + settings.rounds.length + ' round' + (settings.rounds.length > 1 ? 's' : '') + ' × ' + settings.count + ' questions';
+    $('#startHint').textContent = !settings.rounds.length ? 'Pick at least one round.' : n === 0 ? 'Waiting for players to join…' : n + ' player' + (n > 1 ? 's' : '') + ' ready · ' + settings.rounds.length + ' round' + (settings.rounds.length > 1 ? 's' : '') + ' × ' + settings.count + ' questions · ' + Q.DIFF_NAMES[settings.difficulty];
   }
   function renderLobbyPlayers() {
     const ps = playersList(); $('#pCount').textContent = ps.length;
@@ -150,7 +165,7 @@
   function startGame() {
     if (!settings.rounds.length) return;
     const rounds = settings.rounds.map(id => {
-      const g = Q.generateRound(db, id, settings.count, seen, { rotate: settings.rotate });
+      const g = Q.generateRound(db, id, settings.count, seen, { rotate: settings.rotate, difficulty: settings.difficulty });
       g.resets.forEach(c => seen[id].delete(c)); g.used.forEach(c => seen[id].add(c));
       return { id, questions: g.questions };
     });
@@ -164,10 +179,16 @@
   const cur = () => S.game.rounds[S.game.ri];
   const qid = () => S.game.ri + '-' + S.game.qi;
 
+  const ROUND_META = {
+    flags: '15 seconds each · faster = more points', shapes: '15 seconds each · faster = more points', capitals: '15 seconds each · faster = more points',
+    map: '20 seconds each · points by distance', landmarks: '20 seconds each · points by distance',
+    hilo: '12 seconds each · faster = more points', mystery: '3 clues, 7 seconds apart · answer on clue 1 for up to 1000 pts · a wrong answer = 0',
+    zoom: '15 seconds each · the earlier you answer, the more points'
+  };
   function roundIntro(ri) {
     S.game.ri = ri; S.game.qi = -1; S.phase = 'intro';
     const r = Q.ROUNDS[cur().id];
-    $('#game').innerHTML = '<div class="center-col"><div class="round-badge">Round ' + (ri + 1) + ' of ' + S.game.rounds.length + '</div><div class="round-icon">' + r.icon + '</div><div class="round-title">' + r.title + '</div><div class="round-desc">' + r.desc + '</div><div class="round-meta">' + cur().questions.length + ' questions · ' + (r.id === 'map' ? '20 seconds each · points by distance' : '15 seconds each · faster = more points') + '</div></div>';
+    $('#game').innerHTML = '<div class="center-col"><div class="round-badge">Round ' + (ri + 1) + ' of ' + S.game.rounds.length + '</div><div class="round-icon">' + r.icon + '</div><div class="round-title">' + r.title + '</div><div class="round-desc">' + r.desc + '</div><div class="round-meta">' + cur().questions.length + ' questions · ' + ROUND_META[r.id] + '</div></div>';
     Snd.whoosh(); sendAllViews();
     schedule(() => askQuestion(), 4200);
   }
@@ -176,7 +197,7 @@
     const g = S.game; g.qi++;
     if (g.qi >= cur().questions.length) return roundEnd();
     g.q = cur().questions[g.qi]; g.answers = new Map(); g.results = null;
-    g.time = g.q.kind === 'map' ? Q.MAP_TIME : Q.MC_TIME;
+    g.time = Q.TIMES[g.q.kind] || Q.MC_TIME;
     g.startT = Date.now(); g.endT = g.startT + g.time;
     S.phase = 'question';
     renderQuestion(); Snd.question(); sendAllViews();
@@ -185,6 +206,7 @@
       const left = Math.max(0, g.endT - Date.now()); const sec = Math.ceil(left / 1000);
       const tn = $('#tnum'); if (tn) { tn.textContent = sec; tn.classList.toggle('low', sec <= 5); }
       if (sec !== lastSec && sec <= 5 && sec > 0) Snd.tick(); lastSec = sec;
+      if (g.q.kind === 'mystery') showClues(Math.min(3, 1 + Math.floor((g.time - left) / Q.CLUE_MS)));
       if (left <= 0) closeQuestion();
     }, 100);
   }
@@ -197,19 +219,62 @@
     if (q.kind === 'flags') return '<img class="flag" src="flags/' + q.flag + '.svg" alt="flag">';
     if (q.kind === 'shapes') return '<div class="shape-box"><svg viewBox="0 0 1000 1000" style="' + (q.transform && !reveal ? 'transform:' + q.transform : '') + ';transition:transform .8s"><path fill-rule="evenodd" d="' + window.GEO_DATA.shapes[q.shape] + '"/></svg></div>';
     if (q.kind === 'capitals') return '<div class="big-word"><small>' + (q.reverse ? 'Capital city' : 'Country') + '</small>' + esc(q.subject) + '</div>';
+    if (q.kind === 'hilo') return '<div class="hilo">' + [0, 1].map(i => '<div class="hl-card hl-' + i + '"><img class="flag" src="flags/' + q.flags[i] + '.svg" alt=""><div class="hl-name">' + esc(q.options[i]) + '</div><div class="hl-val">' + (reveal ? esc(q.valueText[i]) : '?') + '</div></div>' + (i === 0 ? '<div class="hl-vs">VS</div>' : '')).join('') + '</div>';
+    if (q.kind === 'mystery') return '<div class="clues">' + q.clues.map((c, i) => '<div class="clue" data-ci="' + (i + 1) + '"><span class="cn">Clue ' + (i + 1) + '</span><span class="ct">' + esc(c) + '</span><span class="cp">' + ['up to 1000 pts', 'up to 700 pts', 'up to 400 pts'][i] + '</span></div>').join('') + '</div>';
     return '';
+  }
+  function showClues(n) {
+    document.querySelectorAll('.clue').forEach(el => { const i = +el.dataset.ci; if (i <= n && !el.classList.contains('shown')) { el.classList.add('shown'); if (i > 1) Snd.pop(); } el.classList.toggle('current', i === n); });
+  }
+  function zoomHTML(q) {
+    let h = '<div class="zoom-box" id="zoomBox"><div class="zoom-inner" id="zoomInner"><img src="' + q.img + '.jpg" alt="">';
+    q.layers.forEach((L, i) => { h += '<img class="zl" src="' + q.img + '-' + (i + 1) + '.jpg" alt="" style="left:' + (L[0] * 100) + '%;top:' + (L[1] * 100) + '%;width:' + (100 / L[2]) + '%;height:' + (100 / L[2]) + '%">'; });
+    h += '<svg class="zborder" viewBox="0 0 1500 1000" preserveAspectRatio="none"><path d="' + q.border + '"/></svg></div></div>';
+    return h;
+  }
+  // zoom view: scale s (1 = full image) centred on (cx, cy) in 0..1 image coordinates, clamped to stay inside the image
+  function setZoom(u) {
+    const q = S.game && S.game.q, inner = $('#zoomInner'); if (!q || !inner) return;
+    const e = 1 - Math.pow(1 - u, 1.6);
+    const s = Math.pow(q.s0, 1 - e);
+    const clamp = (c) => Math.min(1 - 0.5 / s, Math.max(0.5 / s, c));
+    const cx = clamp(q.fx + (0.5 - q.fx) * e), cy = clamp(q.fy + (0.5 - q.fy) * e);
+    const W = inner.offsetWidth, H = inner.offsetHeight;
+    inner.style.transform = 'translate(' + (W * (0.5 - cx * s)) + 'px,' + (H * (0.5 - cy * s)) + 'px) scale(' + s + ')';
+    inner.classList.toggle('borders', u >= 0.92);
+    // detail layers: fade out once the view no longer fits inside them (hides the seams between resolutions)
+    const vw = 0.5 / s;
+    inner.querySelectorAll('img.zl').forEach((img, i) => {
+      const L = q.layers[i]; if (!L) return; const w = 1 / L[2];
+      const over = Math.max(0, L[0] - (cx - vw), (cx + vw) - (L[0] + w), L[1] - (cy - vw), (cy + vw) - (L[1] + w));
+      img.style.opacity = Math.max(0, 1 - over / vw * 2.5).toFixed(3);
+    });
+  }
+  function runZoom() {
+    const g = S.game, q = g && g.q; if (!q || q.kind !== 'zoom') return;
+    const id = qid();
+    const step = () => { if (!S.game || qid() !== id || S.phase !== 'question') return; const u = Math.min(1, (Date.now() - g.startT) / Q.ZOOM_MS); setZoom(u); if (u < 1) requestAnimationFrame(step); };
+    setZoom(0); requestAnimationFrame(step);
   }
   function renderQuestion() {
     const g = S.game, q = g.q;
     let h = header() + '<div class="timer"><div id="tbar"></div></div><div id="tnum" class="tnum">' + Math.round(g.time / 1000) + '</div>';
     if (q.kind === 'map') {
       h += '<div class="map-q"><div class="mq1">📍 ' + esc(q.prompt) + '</div><div class="mq2">' + esc(q.subtitle || '') + '</div></div><div class="tv-map" id="tvmap"></div>';
+    } else if (q.kind === 'landmark') {
+      h += '<div class="lm-q"><div class="mq1">📸 ' + esc(q.prompt) + '</div><div class="mq2">Drop your pin on your phone</div></div><div class="lm-photo"><img src="' + q.img + '" alt=""></div><div class="lm-credit">Photo: ' + esc(q.credit) + ' · Wikimedia Commons</div>';
+    } else if (q.kind === 'zoom') {
+      h += zoomHTML(q) + '<div class="opts zopts" id="opts">' + q.options.map((o, i) => '<div class="opt opt-' + LETTERS[i] + '"><span class="sym"></span><span class="lbl">' + esc(o) + '</span><span class="who"></span></div>').join('') + '</div><div class="zcredit">Sentinel-2 cloudless 2016 by EOX (CC BY 4.0)</div>';
     } else {
-      h += '<div class="qprompt">' + esc(q.prompt) + '</div><div class="media">' + mediaHTML(q) + '</div>';
-      h += '<div class="opts" id="opts">' + q.options.map((o, i) => '<div class="opt opt-' + LETTERS[i] + '"><span class="sym"></span><span class="lbl">' + esc(o) + '</span><span class="who"></span></div>').join('') + '</div>';
+      if (q.kind === 'hilo') h += '<div class="qprompt">' + esc(q.prompt) + '<div class="qsub">' + esc(q.subtitle) + '</div></div><div class="media hilo-media">' + mediaHTML(q) + '</div>';
+      else
+      h += '<div class="qprompt">' + esc(q.prompt) + '</div><div class="media' + (q.kind === 'mystery' ? ' mystery-media' : '') + '">' + mediaHTML(q) + '</div>';
+      h += '<div class="opts' + (q.kind === 'hilo' ? ' two' : '') + '" id="opts">' + q.options.map((o, i) => '<div class="opt opt-' + LETTERS[i] + '"><span class="sym"></span><span class="lbl">' + esc(o) + '</span><span class="who"></span></div>').join('') + '</div>';
     }
     $('#game').innerHTML = h;
     if (q.kind === 'map') { const m = MAP.createSvg(); $('#tvmap').appendChild(m.svg); }
+    if (q.kind === 'mystery') showClues(1);
+    if (q.kind === 'zoom') runZoom();
     const bar = $('#tbar'); bar.style.transition = 'none'; bar.style.width = '100%';
     requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.transition = 'width ' + (g.time / 1000) + 's linear'; bar.style.width = '0%'; }));
     renderAnswered();
@@ -220,13 +285,13 @@
     el.innerHTML = ps.map(p => avatar(p, (S.game.answers.has(p.id) ? 'done' : '') + (p.connected ? '' : ' off'))).join('') + '<span style="margin-left:10px">' + S.game.answers.size + '/' + ps.filter(p => p.connected || S.game.answers.has(p.id)).length + '</span>';
   }
   function onAnswer(p, m) {
-    const g = S.game; if (S.phase !== 'question' || !g || m.qid !== qid() || g.q.kind === 'map' || g.answers.has(p.id)) return;
-    const choice = m.choice | 0; if (choice < 0 || choice > 3) return;
+    const g = S.game; if (S.phase !== 'question' || !g || m.qid !== qid() || Q.isPin(g.q) || g.answers.has(p.id)) return;
+    const choice = m.choice | 0; if (choice < 0 || choice >= g.q.options.length) return;
     g.answers.set(p.id, { choice, t: Date.now() - g.startT });
     Snd.lock(); renderAnswered(); sendView(p); checkAllAnswered();
   }
   function onPin(p, m) {
-    const g = S.game; if (S.phase !== 'question' || !g || m.qid !== qid() || g.q.kind !== 'map' || g.answers.has(p.id)) return;
+    const g = S.game; if (S.phase !== 'question' || !g || m.qid !== qid() || !Q.isPin(g.q) || g.answers.has(p.id)) return;
     const lat = +m.lat, lon = +m.lon; if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return;
     g.answers.set(p.id, { lat, lon, t: Date.now() - g.startT });
     Snd.lock(); renderAnswered(); sendView(p); checkAllAnswered();
@@ -244,14 +309,14 @@
     const res = new Map();
     playersList().forEach(p => {
       const a = g.answers.get(p.id); let r;
-      if (q.kind === 'map') {
+      if (Q.isPin(q)) {
         const km = a ? Q.haversine(a.lat, a.lon, q.lat, q.lon) : null;
         const pts = Q.mapPoints(km);
         r = { answered: !!a, km, points: pts, bonus: 0, correct: km != null && km <= 300 };
       } else {
         const ok = !!a && a.choice === q.correct;
         p.streak = ok ? p.streak + 1 : 0;
-        const pts = ok ? Q.mcPoints(true, a.t, g.time) : 0;
+        const pts = !ok ? 0 : q.kind === 'mystery' ? Q.mysteryPoints(true, a.t) : q.kind === 'zoom' ? Q.zoomPoints(true, a.t) : Q.mcPoints(true, a.t, g.time);
         r = { answered: !!a, choice: a ? a.choice : null, correct: ok, points: pts, bonus: ok ? Q.streakBonus(p.streak) : 0, ms: a ? a.t : null };
       }
       p.score += r.points + r.bonus; r.total = p.score; r.streak = p.streak;
@@ -262,12 +327,12 @@
     renderReveal(); Snd.reveal(); sendAllViews();
     const n = cur().questions.length, mid = Math.ceil(n / 2);
     const showMid = n >= 4 && g.qi + 1 === mid;
-    schedule(() => showMid ? midBoard() : askQuestion(), q.kind === 'map' ? 9000 : 6000);
+    schedule(() => showMid ? midBoard() : askQuestion(), Q.isPin(q) ? 9000 : q.kind === 'mystery' || q.kind === 'zoom' ? 7000 : 6000);
   }
 
   function renderReveal() {
     const g = S.game, q = g.q, ps = playersList();
-    if (q.kind === 'map') return renderMapReveal();
+    if (Q.isPin(q)) return renderMapReveal();
     const opts = $('#opts'); if (!opts) return;
     opts.classList.add('revealed');
     [...opts.children].forEach((el, i) => {
@@ -280,15 +345,18 @@
     side.innerHTML = ps.map((p, i) => { const r = g.results.get(p.id); return '<div class="rp ' + (r.correct ? 'ok' : 'ko') + '" style="animation-delay:' + (i * 0.08) + 's">' + avatar(p) + '<span class="nm">' + esc(p.name) + '</span><span class="mk">' + (r.correct ? '✅' : r.answered ? '❌' : '⏰') + '</span></div>'; }).join('');
     $('#game').appendChild(side);
     if (q.kind === 'shapes' && q.transform) { const sv = $('.shape-box svg'); if (sv) sv.style.transform = 'none'; }
+    if (q.kind === 'hilo') { $('.media').innerHTML = mediaHTML(q, true); const win = $('.hl-' + q.correct); if (win) win.classList.add('win'); $('.hl-' + (1 - q.correct)).classList.add('lose'); return; }
+    if (q.kind === 'mystery') { showClues(3); document.querySelectorAll('.clue').forEach(el => el.classList.remove('current')); $('.media').classList.add('with-side'); const qp = $('.qprompt'); if (qp) qp.style.visibility = 'hidden'; }
+    if (q.kind === 'zoom') { const inner = $('#zoomInner'); if (inner) { inner.style.transition = 'transform .8s ease-out'; setZoom(1); } }
     const t = db.by[q.target];
-    const cap = document.createElement('div'); cap.className = 'reveal-cap';
-    cap.textContent = q.kind === 'capitals' ? (t.cap + ' is the capital of ' + t.n) : t.n;
+    const cap = document.createElement('div'); cap.className = 'reveal-cap' + (q.kind === 'mystery' ? ' mystery-cap' : q.kind === 'zoom' ? ' zoom-cap' : '');
+    cap.textContent = q.kind === 'capitals' ? (t.cap + ' is the capital of ' + t.n) : q.kind === 'zoom' ? t.n + ' · ' + q.spot : t.n;
     $('#game').appendChild(cap);
   }
 
   function renderMapReveal() {
     const g = S.game, q = g.q, ps = playersList();
-    $('#game').innerHTML = header() + '<div class="map-q small"><div class="mq1">📍 ' + esc(q.cap) + (q.subtitle ? ', ' + esc(q.subtitle) : '') + '</div></div><div class="tv-map with-side" id="tvmap"></div><div class="rev-side" id="mapSide"></div>';
+    $('#game').innerHTML = header() + '<div class="map-q small"><div class="mq1">' + (q.kind === 'landmark' ? '📸 ' : '📍 ') + esc(q.label) + (q.subtitle ? ', ' + esc(q.subtitle) : '') + '</div></div><div class="tv-map with-side" id="tvmap"></div><div class="rev-side" id="mapSide"></div>' + (q.kind === 'landmark' ? '<div class="lm-thumb"><img src="' + q.img + '" alt=""></div>' : '');
     const m = MAP.createSvg(); $('#tvmap').appendChild(m.svg);
     const [tx, ty] = MAP.project(q.lat, q.lon);
     const pts = [[tx, ty]];
@@ -320,7 +388,7 @@
     const star = el('g', { transform: 'translate(' + tx + ' ' + ty + ') scale(' + k + ')' }, pinsG);
     el('circle', { r: 30, fill: 'rgba(255,210,63,.25)', stroke: '#ffd23f', 'stroke-width': 3 }, star);
     const st = el('text', { x: 0, y: 13, 'font-size': 38, 'text-anchor': 'middle' }, star); st.textContent = '⭐';
-    const nm = el('text', { x: 0, y: -42, 'font-size': 30, 'text-anchor': 'middle', style: 'paint-order:stroke;stroke:#0a0f2c;stroke-width:6px' }, star); nm.textContent = q.cap;
+    const nm = el('text', { x: 0, y: -42, 'font-size': 30, 'text-anchor': 'middle', style: 'paint-order:stroke;stroke:#0a0f2c;stroke-width:6px' }, star); nm.textContent = q.label;
     // animate viewBox
     const t0 = performance.now(), D = 1400 * Math.min(1, FAST * 2);
     const step = (t) => { const u = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - u, 3); const v = ['x', 'y', 'w', 'h'].map(kk => from[kk] + (target[kk] - from[kk]) * e); m.svg.setAttribute('viewBox', v.join(' ')); if (u < 1) requestAnimationFrame(step); };
@@ -401,13 +469,14 @@
     if (S.phase === 'question') {
       const q = g.q, a = g.answers.get(p.id), left = Math.max(0, g.endT - Date.now());
       const common = { qid: qid(), tier: q.tier, tierName: Q.TIER_NAMES[q.tier], qnum: g.qi + 1, qof: cur().questions.length, left, time: g.time, round: Q.ROUNDS[cur().id].title };
-      if (q.kind === 'map') return Object.assign(base, common, { screen: 'map', prompt: q.prompt, subtitle: q.subtitle, locked: !!a, pin: a ? { lat: a.lat, lon: a.lon } : null });
-      return Object.assign(base, common, { screen: 'question', kind: q.kind, prompt: q.prompt, subject: q.kind === 'capitals' ? q.subject : null, flag: q.flag || null, shape: q.kind === 'shapes' ? q.shape : null, shapePath: q.kind === 'shapes' ? window.GEO_DATA.shapes[q.shape] : null, transform: q.transform || null, options: q.options, locked: !!a, choice: a ? a.choice : null });
+      if (Q.isPin(q)) return Object.assign(base, common, { screen: 'map', kind: q.kind, prompt: q.prompt, subtitle: q.kind === 'landmark' ? 'Look at the photo on the big screen' : q.subtitle, img: q.kind === 'landmark' ? q.img : null, locked: !!a, pin: a ? { lat: a.lat, lon: a.lon } : null });
+      return Object.assign(base, common, { screen: 'question', kind: q.kind, flags: q.kind === 'hilo' ? q.flags : null, clues: q.kind === 'mystery' ? q.clues : null, clueMs: Q.CLUE_MS, subtitle: q.kind === 'hilo' ? q.subtitle : null, prompt: q.prompt, subject: q.kind === 'capitals' ? q.subject : null, flag: q.flag || null, shape: q.kind === 'shapes' ? q.shape : null, shapePath: q.kind === 'shapes' ? window.GEO_DATA.shapes[q.shape] : null, transform: q.transform || null, options: q.options, locked: !!a, choice: a ? a.choice : null });
     }
     if (S.phase === 'reveal') {
       const q = g.q, r = g.results.get(p.id) || { answered: false, points: 0, bonus: 0, total: p.score, streak: p.streak };
       const t = db.by[q.target];
-      return Object.assign(base, { screen: 'result', kind: q.kind, correct: r.correct, answered: r.answered, points: r.points, bonus: r.bonus, total: p.score, streak: p.streak, km: r.km, answer: q.kind === 'map' ? q.cap + (q.subtitle ? ', ' + q.subtitle : '') : q.options[q.correct], yours: r.choice != null && q.options ? q.options[r.choice] : null, capInfo: t.cap + ' · ' + t.n });
+      const info = q.kind === 'hilo' ? q.options[0] + ': ' + q.valueText[0] + ' · ' + q.options[1] + ': ' + q.valueText[1] : q.kind === 'landmark' ? q.label + ' · ' + q.subtitle : q.kind === 'zoom' ? (t ? t.n : '') + ' · ' + q.spot : t ? t.cap + ' · ' + t.n : '';
+      return Object.assign(base, { screen: 'result', kind: q.kind, pin: Q.isPin(q), correct: r.correct, answered: r.answered, points: r.points, bonus: r.bonus, total: p.score, streak: p.streak, km: r.km, answer: Q.isPin(q) ? q.label + (q.subtitle ? ', ' + q.subtitle : '') : q.options[q.correct], yours: r.choice != null && q.options ? q.options[r.choice] : null, capInfo: info });
     }
     if (S.phase === 'mid') { const rk = ranked(); return Object.assign(base, { screen: 'wait', icon: '📊', text: 'Halfway standings on the big screen!', sub: 'You are #' + (rk.findIndex(x => x.id === p.id) + 1) + ' with ' + fmt(p.score) + ' pts' }); }
     if (S.phase === 'roundEnd') return Object.assign(base, { screen: 'wait', icon: '✅', text: 'Round complete!', sub: 'Your total: ' + fmt(p.score) + ' pts' });

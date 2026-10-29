@@ -57,3 +57,14 @@ h1 { margin: 0; font-size: 44px; font-weight: 800; background: linear-gradient(9
 .mprompt { text-align: center; font-weight: 800; font-size: 22px; color: var(--acc); line-height: 1.1; }
 .msub { text-align: center; font-size: 15px; color: var(--mut); margin-bottom: 8px; }
 .rank-big { font-size: 110px; font-weight: 800; line-height: 1; animation: popIn .6s both; }
+.qsub { font-size: 14px; color: var(--mut); font-weight: 500; margin-top: 2px; }
+.thumb.small { height: auto; min-height: 0; }
+.pclue { font-size: 17px; line-height: 1.3; background: rgba(255,255,255,.08); border-radius: 14px; padding: 10px 14px; text-align: left; width: 100%; }
+.pclue b { display: block; font-size: 13px; color: var(--acc); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.pwatch { font-size: 18px; color: var(--mut); text-align: center; padding: 8px; }
+.pops.two { grid-template-rows: repeat(2, 1fr); }
+.pops.two .pop { flex-direction: column; justify-content: center; text-align: center; font-size: 26px; gap: 10px; }
+.pops.two .pop .sym { display: none; }
+.pflag { height: 64px; max-width: 70%; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+.lmthumb { height: 44px; border-radius: 6px; vertical-align: middle; margin-right: 6px; }
+.res-info { font-size: 15px; color: var(--mut); margin-top: 6px; }
